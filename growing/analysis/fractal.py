@@ -154,8 +154,9 @@ def branch_geometry(neuron) -> dict:
 def soma_positions(net):
     P = []
     for n in net.neurons:
-        p = getattr(getattr(n, "soma", None), "position", None)
-        P.append(np.asarray(p, float) if p is not None else np.array([np.nan, np.nan]))
+        soma = getattr(n, "soma", None) or getattr(getattr(n, "dendrite", None), "soma", None)
+        p = getattr(soma, "position", None)
+        P.append(np.asarray(p, float)[:2] if p is not None else np.array([np.nan, np.nan]))
     return np.array(P)
 
 
@@ -256,6 +257,13 @@ def morphology_metrics(sim, M, lif, dynamic=True, seed=0) -> tuple[dict, dict]:
         lambda_max_P=lambda_max(M, lif),
         **modularity(M, seed=seed),
     )
+    axons = getattr(sim, "axons", None)
+    if axons is not None:
+        am = axons.mask()
+        da = box_dimension(am, fixed_range=(NETWORK_MIN_SIZE, hi), dynamic=dynamic, seed=seed)
+        du = box_dimension(am | net_fill, fixed_range=(NETWORK_MIN_SIZE, hi), dynamic=dynamic, seed=seed)
+        out.update(D_axon_network=da["D_fixed"], D_axon_network_R2=da["R2_fixed"],
+                   D_axon_network_dyn=da["D_dyn"], D_network_with_axons=du["D_fixed"])
     per["soma_pos"] = pos
     per["conn_prob_bins"] = np.asarray(cd.get("conn_prob_bins", []))
     per["conn_prob"] = np.asarray(cd.get("conn_prob", []))

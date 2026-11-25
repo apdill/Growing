@@ -14,7 +14,7 @@ SPEC.json:
       "seeds": [1, 2]
     }
 
-Keys are "<cfg>.<field>" with cfg in {morph, branch, lif, analysis}. Each run writes
+Keys are "<cfg>.<field>" with cfg in {morph, branch, lif, analysis, axon}. Each run writes
 sweeps/<name>/runs/<run_id>/{config.json, metrics.json, spikes.npz, M.npy, traces.npz,
 morphology.png, avalanches.png}; all metrics are collected in sweeps/<name>/results.csv.
 Runs already finished (metrics.json present) are skipped, so a sweep can be resumed.
@@ -102,8 +102,10 @@ def run_one(args):
         from growing.sim import run_sim as rs
         from growing.analysis import avalanches, probes
 
+        from growing.sim.axon_nets import AxonConfig, render_axo_frame
         morph, branch, lif, analysis = rs.default_configs()
-        cfgs = dict(morph=morph, branch=branch, lif=lif, analysis=analysis)
+        axon = AxonConfig()
+        cfgs = dict(morph=morph, branch=branch, lif=lif, analysis=analysis, axon=axon)
         seed = int(ov.get("seed", 1))
         morph.morphology_seed = seed
         lif.animate = False
@@ -121,7 +123,7 @@ def run_one(args):
 
         random.seed(seed); np.random.seed(seed)
         t0 = time.time()
-        sim = rs.BranchMorphPlasticLIFSim(morph, lif, branch)
+        sim = rs.BranchMorphPlasticLIFSim(morph, lif, branch, axon)
         res = sim.simulate(analysis_cfg=None)
         wall = time.time() - t0
 
@@ -176,7 +178,7 @@ def run_one(args):
             **avs, **avs4, **frz,
             m_windows=wb["m"].tolist(), m_first_window=float(wb["m"][0]) if len(wb["m"]) else np.nan,
             dynamic_range_db=dr["delta_db"], dr_F0=dr["F0"], dr_Fmax=dr["Fmax"],
-            **cs, **gs, **sigma_stats,
+            **cs, **gs, **sigma_stats, **res.get("axon_stats", {}),
         )
         if ov.get("fractal", True):
             # Morphology geometry: box-counting D (FracStack, min counts, unweighted OLS) per neuron
@@ -202,9 +204,12 @@ def run_one(args):
         try:
             fig = avalanches.plot(av, dt=lif.dt, title=rid[:120])
             fig.savefig(os.path.join(out, "avalanches.png"), dpi=80); plt.close(fig)
-            frame = sim.branch_net.render_frame(mask_type="filled", colormap="summer", show_connections=False,
-                                                show_fusions=False, show_soma_connections=False,
-                                                background_color="black", figsize=(6, 6), dpi=100)
+            if sim.axons is not None:
+                frame = render_axo_frame(sim.branch_net, sim.axons)
+            else:
+                frame = sim.branch_net.render_frame(mask_type="filled", colormap="summer", show_connections=False,
+                                                    show_fusions=False, show_soma_connections=False,
+                                                    background_color="black", figsize=(6, 6), dpi=100)
             import imageio.v2 as imageio
             imageio.imwrite(os.path.join(out, "morphology.png"), frame)
         except Exception as e:  # plotting must never lose a run

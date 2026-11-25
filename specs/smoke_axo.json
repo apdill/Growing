@@ -1,0 +1,10 @@
+{"name": "smoke_axo",
+ "base": {"lif.duration": 2000, "lif.external_drive": "poisson", "lif.spike_mode": "branching", "lif.tfr": 0.05,
+          "lif.ext_rate": 0.0005, "lif.morphology_update_interval": 10, "lif.refractory_steps": 2,
+          "morph.num_neurons": 50, "morph.width": 1024, "morph.height": 1024, "morph.contact_ref_px": 200,
+          "branch.pass_through_probability": 0.9, "frozen_steps": 20000},
+ "runs": [{"morph.connectivity_mode": "dendro_dendritic"},
+          {"morph.connectivity_mode": "axo_dendritic", "axon.growth": "open_loop", "axon.length_px": 600},
+          {"morph.connectivity_mode": "axo_dendritic", "axon.growth": "homeostatic", "axon.growth_rate": 1.0},
+          {"morph.connectivity_mode": "axo_dendritic", "axon.growth": "coupled", "axon.length_ratio": 2.0}],
+ "seeds": [1]}

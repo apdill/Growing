@@ -20,6 +20,7 @@ from ..analysis import avalanches
 from .lif_dynamics import lif_step
 from . import branch_nets
 from .lif_neuron import Neuron as LIFNeuron
+from .axon_nets import AxonConfig, AxonNetwork
 from ..paths import SUMMARY_DIR
 
 
@@ -41,6 +42,10 @@ class MorphologyConfig:
     # 'row':      legacy row-normalisation (every connected neuron gets the same total input).
     connectivity_normalization: str = "absolute"
     contact_ref_px: float = 50.0
+    # 'dendro_dendritic': legacy symmetric dendrite-dendrite contacts (default).
+    # 'axo_dendritic'   : directed axon(j) -> dendrite/soma(i) contacts; axons from axon_nets.py
+    #                     configured by AxonConfig (growth rule, length, collaterals).
+    connectivity_mode: str = "dendro_dendritic"
     prune_forget_on_degrowth: bool = True
     # Neurons below target whose tips have all been stopped (collision / edge) sprout a new
     # primary dendrite from the soma in the least crowded direction.
@@ -191,10 +196,15 @@ class BranchMorphPlasticLIFSim:
     in-place pruning/replay from recorded segment history.
     """
 
-    def __init__(self, morph_cfg: MorphologyConfig, lif_cfg: LIFConfig, branch_cfg: BranchNeuronConfig):
+    def __init__(self, morph_cfg: MorphologyConfig, lif_cfg: LIFConfig, branch_cfg: BranchNeuronConfig,
+                 axon_cfg: AxonConfig | None = None):
         self.morph_cfg = morph_cfg
         self.lif_cfg = lif_cfg
         self.branch_cfg = branch_cfg
+        self.axon_cfg = axon_cfg if axon_cfg is not None else AxonConfig()
+        self.axons = None   # AxonNetwork in 'axo_dendritic' mode
+        if morph_cfg.connectivity_mode not in ("dendro_dendritic", "axo_dendritic"):
+            raise ValueError(f"unknown connectivity_mode {morph_cfg.connectivity_mode!r}")
         self.N = morph_cfg.num_neurons
 
         # By design, branch growth integration uses the same dt as the LIF simulation.
@@ -382,6 +392,8 @@ class BranchMorphPlasticLIFSim:
             self.lif_neurons[i].size = float(self.total_lengths[i])
 
         self.branch_net = net
+        if self.morph_cfg.connectivity_mode == "axo_dendritic":
+            self.axons = AxonNetwork(net, self.axon_cfg, self.morph_cfg, seed=int(self.morph_cfg.morphology_seed))
         # Replay current (empty) branch history so masks reflect the current visible lengths
         # and finalize auxiliary masks for rendering/connectivity.
         self.branch_net.apply_visible_lengths(
@@ -392,7 +404,12 @@ class BranchMorphPlasticLIFSim:
         self.visible_lengths = np.minimum(self.total_lengths, self.branch_net.get_recorded_branch_length_limits())
         for i, neuron in enumerate(self.lif_neurons):
             neuron.size = float(self.visible_lengths[i])
-        self.M = self._compute_connectivity_from_dendrites()
+        self.M = self._compute_connectivity()
+
+    def _compute_connectivity(self):
+        if self.axons is not None:
+            return self.axons.connectivity()
+        return self._compute_connectivity_from_dendrites()
 
     def _step_morphology_online(self, current_step: int, allow_growth: bool=True, update_connectivity: bool=True,
                                 degrow_mask=None, grow_mask=None, dt_morph=None):
@@ -519,9 +536,11 @@ class BranchMorphPlasticLIFSim:
         self.visible_lengths = np.minimum(self.total_lengths, recorded_limits)
         for i, neuron in enumerate(self.lif_neurons):
             neuron.size = float(self.visible_lengths[i])
+        if self.axons is not None:
+            self.axons.grow()
         if update_connectivity:
             t_c = time.perf_counter()
-            self.M = self._compute_connectivity_from_dendrites()
+            self.M = self._compute_connectivity()
             self.coupling_trace.append((current_step, self.coupling_sigma()))
             prof["connectivity_s"] += time.perf_counter() - t_c
         prof["active_tips_after"] = int(sum(len(n.active_tips) for n in self.branch_net.neurons))
@@ -681,6 +700,8 @@ class BranchMorphPlasticLIFSim:
             prev_target_lengths = self.total_lengths.copy()
             t1 = time.perf_counter() if profiling_enabled else None
             self._update_dendrite_lengths()
+            if self.axons is not None:
+                self.axons.update_targets(self.rates, self.lif_cfg.tfr, self.lif_cfg.dt, self.total_lengths)
             if profiling_enabled:
                 dt_len = time.perf_counter() - t1
                 prof_add("length_update", dt_len)
@@ -778,6 +799,8 @@ class BranchMorphPlasticLIFSim:
             "connectivity_matrix": self.M.copy(),
             "coupling_trace": np.array(self.coupling_trace, dtype=float),
             "profiling": results_profile,
+            "axon_network": self.axons,
+            "axon_stats": self.axons.stats() if self.axons is not None else {},
         }
 
     def _finalize_profile_summary(self, profiling):

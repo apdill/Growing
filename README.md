@@ -12,6 +12,7 @@ growing/                    importable package
   paths.py                  repository locations (specs/, sweeps/, reports/, ...)
   sim/
     branch_nets.py          dendritic morphology generation (stochastic fractal branching)
+    axon_nets.py            axons + directed axo-dendritic connectivity (morph.connectivity_mode)
     run_sim.py              plastic network simulation (configs, growth rules, connectivity)
     lif_dynamics.py         shared neuron update (threshold / escape-noise LIF, branching model)
     lif_neuron.py           display neuron used by run_sim
@@ -27,6 +28,7 @@ scripts/
   figures/                  figure scripts for reports
   external/                 analysis of third-party data (e.g. Stiber-lab simulations)
 specs/                      sweep specifications (drafts/ = not yet runnable)
+tests/                      legacy-mode fingerprint, axo-dendritic checks
 ```
 
 Outputs (`sweeps/`, `reports/`, `summary_plots/`, `external/`) and planning material are local only.
