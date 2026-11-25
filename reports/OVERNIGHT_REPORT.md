@@ -4,56 +4,64 @@ Branch-morphology homeostatic plasticity model (Kossio-style structural plastici
 dendrites). All numbers below come from `sweeps/<name>/results.csv`; figures are in `reports/`.
 Each sweep is reproducible with `python sweep.py sweep_specs/<name>.json`.
 
-## TL;DR
+## TL;DR (updated 06:30 after s7–s10)
 
-1. **Homeostatic growth drives the network towards criticality exactly as the driven-branching
-   argument predicts.** With sparse external drive h and target rate r*, the grown network settles at
-   branching ratio m ≈ 1 − h/r* (s1). The weaker the drive relative to the target, the closer to m = 1.
-2. **The original neuron model cannot be critical.** The hard-threshold LIF with slow leak (legacy
-   default) has a *discontinuous* (bistable) transition: frozen grown networks either fall silent or
-   saturate (rate jumps 0.004 → 1.6 between 0.75× and 1× coupling). Homeostasis just keeps the
-   plastic network flipping across that edge. Refractoriness turns the jump into a continuous
-   transition; the cleanest model is probabilistic transmission (Haldeman–Beggs / Kinouchi–Copelli),
-   in which the morphology directly sets transmission probabilities p_ij.
-3. **With that model, three sandbox settings decide whether criticality is reachable:**
-   * *contact granularity* (`contact_ref_px`): one dendrite crossing must change σ by a small amount,
-     otherwise homeostasis can only jump between sub- and supercritical (σ s.d. 0.2–0.6 at 50 px vs
-     0.02 at 200 px);
-   * *pass-through probability*: with the original competition rule (tips mostly stop at the first
-     contact) arbors stall at ~25 % coverage and never reach the target rate; at 0.6–0.9 they do;
-   * *drive ratio* h/r*.
-4. **Self-organised critical avalanches during growth (s6, long plastic runs, N = 50):** at
-   h/r* = 0.01 all three seeds give τ = 1.43–1.46, α = 1.60–1.74, and the crackling-noise relation
-   holds (γ_fit = 1.43–1.45 vs (α−1)/(τ−1) = 1.39–1.59), with m ≈ 0.96. At h/r* = 0.04 the network
-   is subcritical (power law only up to ~100, steep cutoff); at h/r* = 0.002 it overshoots
-   (system-spanning bursts, bump in P(S)).
-5. **Function:** dynamic range rises towards the critical point; grown networks sit just on the
-   subcritical side of the optimum (the "reverberating regime", m ≈ 0.9–0.98, also reported in vivo by
-   Wilting & Priesemann 2018).
+**Headline: homeostatic dendritic growth does self-organise to criticality, but in the proper SOC
+limit — N → ∞ with the drive per neuron scaled down (h ∝ 1/N, s9). In finite networks it sits just
+subcritical and wanders across the critical point (quasi-criticality). The grown network's set
+point coincides with its dynamic-range optimum.**
 
-6. **Finite size (s7): is it real criticality or quasi-criticality?** The power law during growth is
-   robust for N ≥ 50 (τ = 1.43–1.45, α = 1.6–1.75) and its cutoff grows with N (s_c ~ N^0.5), but
-   the coupling σ(t) is *not* pinned: homeostasis makes it oscillate around the set point, and
-   avalanches that start in high-σ periods are 10–50× larger than those in low-σ periods. Part of
-   the pooled power law is therefore a mixture across sub- and supercritical states
-   ("self-organised quasi-criticality", Bonachela & Muñoz 2009). The fluctuations shrink faster
-   than N^−1/2 (s.d. σ ~ N^−0.66), and so does the mixing (high/low ⟨S⟩ ratio 50 → 11 from
-   N = 25 to 200): **the larger the network, the more tightly growth holds it at one point.**
-   That point stays at a fixed distance from m = 1 (1 − m ≈ 0.035 at every N), set by the drive.
+1. **Set point.** With sparse drive h and target rate r*, the grown network settles at m ≈ 1 − h/r*
+   (s1). The weaker the drive, the closer to criticality.
+2. **Neuron model.** The legacy hard-threshold LIF has a discontinuous (bistable) transition and
+   cannot be critical. Probabilistic transmission (Haldeman–Beggs / Kinouchi–Copelli; morphology sets
+   p_ij) has a continuous one (s2–s3).
+3. **Sandbox settings needed** (s3–s5): fine contact granularity (`contact_ref_px` ≥ 100–200, so one
+   crossing changes σ only a little) and pass-through ≥ 0.6 (otherwise arbors stall below target).
+4. **⚠ Exponent correction.** The earlier "τ = 1.43–1.46" numbers are Clauset/KS fits whose xmin
+   (3–11) cuts off the body. A fixed-window MLE (S ∈ [2, 200]; `avalanches.fit_truncated_power_law`)
+   shows the distributions are curved: body slope 1.0–1.3 in most finite runs. On frozen networks, KS
+   picks xmin in the cutoff region (xmin 10²–10⁴, 50–200 events) → the "τ = 3–6" frozen values are
+   artifacts. Window benchmark for exact critical branching: τ = 1.50, α = 1.64
+   (`reports/trunc_exponents.csv`, `reanalyze.py`).
+5. **Finite-size scaling — the main result (s9 vs s7, `reports/s9_vs_s7.png`).**
+   * h/r* fixed (s7): m stays at 0.965 for all N; τ_window 1.01 → 1.29; cutoff ~ N^0.54.
+   * N·h fixed, h/r* = 0.5/N (s9): m = 0.948 → 0.962 → 0.969 → **0.988**; τ_window 1.10 → 1.19 →
+     1.32 → **1.41**; α_window 1.19 → 1.55 (critical 1.64); cutoff ~ N^1.3 (max avalanche 10⁴ at
+     N = 200). **The statistics converge on critical branching as N grows.**
+6. **Quasi-criticality in finite networks (s7, s8, low-drive scans).** Homeostasis makes the coupling
+   σ(t) oscillate around the set point; avalanches starting in the top σ-tertile are 10–80× larger
+   than in the bottom one. Frozen copies driven 10× more weakly (`reports/s8_frozen_lowdrive_pS.png`)
+   put the true critical coupling about 15–20 % above the grown mean. Below it P(S) has an
+   exponential cutoff; above it there is a bump of system-spanning bursts. The pooled distribution
+   during growth mixes the two (Bonachela & Muñoz 2009 "SOqC"). Fluctuations shrink with N at fixed h
+   (s.d. σ ~ N^−0.66) but not when h ∝ 1/N (fewer drive events → noisier rate sensor). Across all
+   branching sweeps, larger σ fluctuations → steeper, more "critical-looking" body
+   (`reports/cross_sweep_tau.png`).
+7. **Timescales (s8).** Slow growth pins σ (s.d. 0.1): m ≈ 0.956, shallow body (τ_window ≈ 0.95),
+   highest and most consistent dynamic range (29–33 dB). Fast growth: σ swings (s.d. 0.3–0.45),
+   3/2-like statistics, but lower dynamic range. At growth rate 2 with a short sensor, homeostasis
+   fails (rate 50 % of target, relaxation oscillations). **"Pretty" power laws and good function are
+   different things here:** across all runs the dynamic range anticorrelates with the body exponent
+   (r = −0.59).
+8. **Function at the set point (s7 coupling scans, `reports/s7_coupling_scans.png`).** For N = 100/200,
+   the frozen network's dynamic-range peak, branching-ratio peak and rate = target point coincide,
+   and the mean coupling the network grows to sits right there. Growth places the network at its
+   point of maximal sensitivity, on the subcritical side of the h → 0 critical point (the
+   "reverberating regime", m ≈ 0.95–0.99, cf. Wilting & Priesemann 2018).
+9. **Morphology barely matters (s10).** Fractal dimension D ∈ {1.3, 1.8, 2.5} × base inter-branch
+   length ℓ0 ∈ {25, 60, 150} px: m 0.957–0.965, τ_window 1.17–1.24, rate on target for all nine.
+   Graph structure also barely moves: degree 6–9, clustering 0.51–0.58, small-world σ ≈ 2.3–2.8.
+   The critical state is set by the homeostatic rule and drive, not by arbor geometry — a
+   universality-type result. Dynamic range varies 26–34 dB with no consistent trend over 2 seeds.
 
-7. **Function at the set point (s7 coupling scans):** in frozen copies of the grown networks
-   (N = 100, 200), the peak of the dynamic range, the peak of the branching ratio and the point where
-   the frozen rate equals the target all fall at the same coupling, and **the mean coupling the network
-   grows to sits exactly there**. Homeostatic growth places the network at its point of maximal
-   sensitivity; at N = 25–50 the curves are too noisy to say this.
-8. **Timescales (s8): the clean 3/2 law is tied to *fast* plasticity.** With slow growth (σ pinned,
-   s.d. 0.1) the network sits at m ≈ 0.956 and P(S) has a shallow body (slope ≈ 0.95) with a hard
-   cutoff, not τ = 3/2. Faster growth (σ s.d. 0.3–0.45) gives slopes of 1.25–1.35 (KS fits τ ≈ 1.4)
-   and satisfies crackling-noise scaling. The 3/2-like statistics come with strong σ sweeping
-   (high/low-σ ⟨S⟩ ratio 30–80 vs ~6 when slow). Two readings, both plausible: (i) quasi-criticality
-   (mixing sub/supercritical epochs), and (ii) the slow-growth network is at a stationary point that
-   is near-critical but *driven* (avalanches overlap, Das & Levina 2019 "relaxed timescale
-   separation"), which flattens the body. s9 (h ∝ 1/N) is set up to separate these.
+### Suggested next steps
+* Push N further with h ∝ 1/N (N = 400 needs ~16 GB with per-neuron count layers; would need
+  sparse/shared count layers first).
+* A slower or better-averaged rate sensor at small h (rate_tau ∝ 1/h) to cut σ fluctuations in the
+  s9 limit — tests whether quasi-criticality vanishes too.
+* Topology at criticality: compare grown graphs with degree-preserving rewired controls (dynamic
+  range, m) to see whether growth builds something functionally special beyond the σ value.
 
 <!-- S7 / S8 sections appended below -->
 
@@ -143,3 +151,30 @@ Rates at target (0.043–0.049 vs 0.05) in all runs.
   of target, relaxation oscillations).
 * rate_tau (activity-sensor timescale) matters less than the growth rate; a long sensor with fast
   growth gives the largest σ swings (the classic delayed-feedback oscillation).
+
+### s9 — finite-size scaling with N·h fixed (h = 0.0005·50/N) → `reports/s9_fss_scaled_drive_fss.png`, `reports/s9_vs_s7.png`
+
+| N | h/r* | m | τ window [2,200] | α window [2,50] | τ KS | ⟨S²⟩/⟨S⟩ | max S | s.d. σ | Δ (dB) |
+|---|---|---|---|---|---|---|---|---|---|
+| 25 | 0.02 | 0.948 | 1.10 | 1.19 | 2.28 | 370 | 1 400 | 0.39 | 20.5 |
+| 50 | 0.01 | 0.962 | 1.19 | 1.27 | 1.47 | 990 | 2 500 | 0.33 | 29.3 |
+| 100 | 0.005 | 0.969 | 1.32 | 1.44 | 1.38 | 2 440 | 4 240 | 0.29 | 29.8 |
+| 200 | 0.0025 | 0.988 | 1.41 | 1.55 | 1.33 | 5 320 | 10 850 | 0.30 | 28.2 |
+
+Critical-branching benchmark in the same windows: τ = 1.50, α = 1.64. 1 − m ~ N^−0.66; cutoff ~ N^1.3
+(99.9th percentile ~ N^0.98). 2 seeds per N.
+
+### s10 — morphology scaling constants (D × ℓ0, N = 50, h/r* = 0.01) → `reports/s10_morphology.png`
+
+| D \ ℓ0 | 25 | 60 | 150 |
+|---|---|---|---|
+| 1.3 | m 0.965, τ_w 1.21, Δ 27.8 | 0.964, 1.22, 30.7 | 0.961, 1.17, 34.4 |
+| 1.8 | 0.961, 1.24, 26.2 | 0.961, 1.23, 28.4 | 0.959, 1.23, 32.5 |
+| 2.5 | 0.964, 1.19, 32.6 | 0.962, 1.18, 30.6 | 0.957, 1.17, 25.8 |
+
+Rates on target everywhere; arbor radius 300–375 px; coverage 26–29 %.
+
+### Analysis tools added overnight
+`finite_size.py` (FSS + σ-conditioned avalanche test), `timescales.py`, `reanalyze.py` (window
+exponents for all runs → `reports/trunc_exponents.csv`), `cross_sweep.py`, `scan_frozen.py --ext-rate
+--g` (low-drive coupling scans), `reports/make_*.py` (figure scripts).
