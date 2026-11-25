@@ -16,32 +16,23 @@ from __future__ import annotations
 import numpy as np
 
 import avalanches
+from lif_dynamics import lif_step
 
 
 def lif_run(M, lif, steps: int, stim_rate: float = 0.0, stim_kick: float | None = None,
             rng: np.random.Generator | None = None, V0=None):
-    """Simulate the LIF network of run_sim with fixed coupling M (same update rule).
-    Returns the (steps, N) spike raster."""
+    """Simulate the LIF network of run_sim with fixed coupling M (same update, lif_dynamics.lif_step),
+    plus an optional extra Poisson stimulus. Returns the (steps, N) spike raster."""
     rng = rng or np.random.default_rng()
     N = M.shape[0]
-    dt = lif.dt
     V = rng.uniform(-1, 1, N) if V0 is None else np.array(V0, float)
     spikes = np.zeros(N, bool)
+    refr = None
     out = np.zeros((steps, N), bool)
     kick = lif.ext_kick if stim_kick is None else stim_kick
     for t in range(steps):
-        rec = lif.spike_input * (M @ spikes.astype(float))
-        if lif.external_drive == "poisson":
-            drive = lif.ext_kick * rng.poisson(lif.ext_rate * dt, N)
-            dV = -lif.leak * (V - lif.rest)
-        else:
-            drive = 0.0
-            dV = lif.input_noise * rng.random(N) - lif.leak * (V - lif.rest)
-        stim = kick * rng.poisson(stim_rate * dt, N) if stim_rate > 0 else 0.0
-        V = V + rec + drive + stim + dV * dt
-        spikes = V >= lif.spike_threshold
-        V[spikes] = lif.rest
-        V[V < lif.rest] = lif.rest
+        stim = kick * rng.poisson(stim_rate * lif.dt, N) if stim_rate > 0 else None
+        V, spikes, refr = lif_step(V, spikes, M, lif, rng, refr, extra_input=stim)
         out[t] = spikes
     return out
 

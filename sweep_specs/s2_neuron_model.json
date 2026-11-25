@@ -1,0 +1,10 @@
+{"name": "s2_neuron_model",
+ "base": {"lif.duration": 5000, "lif.external_drive": "poisson", "lif.ext_kick": 2.0, "lif.tfr": 0.1, "lif.rate_tau": 200.0},
+ "grid": {"lif.ext_rate": [0.01, 0.002, 0.0005]},
+ "runs": [
+   {"lif.refractory_steps": 0},
+   {"lif.refractory_steps": 2},
+   {"lif.refractory_steps": 4},
+   {"lif.refractory_steps": 2, "lif.spike_mode": "escape", "lif.escape_delta": 0.3, "lif.escape_rate0": 0.5}
+ ],
+ "seeds": [1, 2]}

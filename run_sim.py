@@ -17,6 +17,7 @@ from scipy.ndimage import find_objects
 from tqdm import tqdm
 
 import avalanches
+from lif_dynamics import lif_step
 import branch_nets
 from sim import Neuron as LIFNeuron
 
@@ -68,6 +69,12 @@ class LIFConfig:
     # spontaneous activity (h ~ ext_rate) from recurrent propagation; for a driven branching
     # process homeostasis then sets m ~ 1 - h / tfr.
     external_drive: str = "uniform"
+    # Spike generation (lif_dynamics.py): 'threshold' (legacy hard threshold) or 'escape'
+    # (soft threshold: P(spike) = 1 - exp(-dt*escape_rate0*exp((V - spike_threshold)/escape_delta))).
+    spike_mode: str = "threshold"
+    escape_rate0: float = 1.0
+    escape_delta: float = 0.2
+    refractory_steps: int = 0   # absolute refractory period (steps) after a spike; 0 = none
     ext_rate: float = 0.02
     ext_kick: float = 2.0
     leak: float = 0.02
@@ -607,6 +614,7 @@ class BranchMorphPlasticLIFSim:
     def simulate(self, analysis_cfg: AnalysisConfig | None = None):
         iterations = int(self.lif_cfg.duration / self.lif_cfg.dt)
         V = np.array([n.potential for n in self.lif_neurons], dtype=float)
+        refractory = None
         spikes = np.array([bool(n.spiking) for n in self.lif_neurons], dtype=bool)
 
         spikes_list = []
@@ -634,18 +642,7 @@ class BranchMorphPlasticLIFSim:
             self.t += self.lif_cfg.dt
 
             t0 = time.perf_counter() if profiling_enabled else None
-            spike_input_contribution = self.lif_cfg.spike_input * np.dot(self.M, spikes.astype(float))
-            if self.lif_cfg.external_drive == "poisson":
-                ext = self.lif_cfg.ext_kick * np.random.poisson(self.lif_cfg.ext_rate * self.lif_cfg.dt, self.N)
-                dV_dt = -self.lif_cfg.leak * (V - self.lif_cfg.rest)
-                V += spike_input_contribution + ext + dV_dt * self.lif_cfg.dt
-            else:
-                dV_dt = self.lif_cfg.input_noise * np.random.rand(self.N) - self.lif_cfg.leak * (V - self.lif_cfg.rest)
-                V += spike_input_contribution + dV_dt * self.lif_cfg.dt
-
-            spikes = V >= self.lif_cfg.spike_threshold
-            V[spikes] = self.lif_cfg.rest
-            V[V < self.lif_cfg.rest] = self.lif_cfg.rest
+            V, spikes, refractory = lif_step(V, spikes, self.M, self.lif_cfg, np.random, refractory)
 
             # Exponential firing-rate trace (spikes per time unit).
             alpha = min(1.0, self.lif_cfg.dt / max(self.lif_cfg.rate_tau, 1e-9))
