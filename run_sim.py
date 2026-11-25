@@ -87,7 +87,10 @@ class LIFConfig:
     rate_tau: float = 50.0
     # 'proportional': dL/dt = length_growth_rate * (1 - r/tfr)   (Kossio et al.-style, smooth)
     # 'multiplicative': legacy bang-bang L *= (1 +/- growth_coeff) every step
+    # 'open_loop': no activity feedback; dL/dt = length_growth_rate until target_total_length_px
+    #              (geometry controls: compare morphologies at matched cable length, then freeze)
     growth_rule: str = "proportional"
+    target_total_length_px: float | None = None   # open_loop only
     length_growth_rate: float = 0.5   # px per time unit at r = 0
     # Target length may lead the physically realised length by at most this many px, so a
     # blocked/finished arbor cannot accumulate an unbounded target. None disables.
@@ -584,6 +587,11 @@ class BranchMorphPlasticLIFSim:
             grow = self.rates < cfg.tfr
             self.total_lengths[grow] *= (1.0 + cfg.growth_coeff)
             self.total_lengths[~grow] *= (1.0 - cfg.growth_coeff)
+        elif cfg.growth_rule == "open_loop":
+            if cfg.target_total_length_px is None:
+                raise ValueError("growth_rule='open_loop' needs target_total_length_px")
+            self.total_lengths = np.minimum(self.total_lengths + cfg.dt * cfg.length_growth_rate,
+                                            float(cfg.target_total_length_px))
         else:
             self.total_lengths += cfg.dt * cfg.length_growth_rate * (1.0 - self.rates / cfg.tfr)
 

@@ -107,7 +107,9 @@ def run_one(args):
         morph.morphology_seed = seed
         lif.animate = False
         for k, v in ov.items():
-            if k in ("seed", "frozen_steps"):
+            if isinstance(v, str) and v.startswith("FROM_"):
+                raise ValueError(f"placeholder {k}={v} not filled in")
+            if k in ("seed", "frozen_steps", "fractal", "fractal_dynamic") or k.startswith("_"):
                 continue
             c, field = k.split(".", 1)
             if not hasattr(cfgs[c], field):
@@ -175,6 +177,19 @@ def run_one(args):
             dynamic_range_db=dr["delta_db"], dr_F0=dr["F0"], dr_Fmax=dr["Fmax"],
             **cs, **gs, **sigma_stats,
         )
+        if ov.get("fractal", True):
+            # Morphology geometry: box-counting D (FracStack, min counts, unweighted OLS) per neuron
+            # and for the whole network, lacunarity, tortuosity, connection-distance decay,
+            # modularity and the largest eigenvalue of the transmission matrix.
+            try:
+                import fractal
+                t2 = time.time()
+                fm, per = fractal.morphology_metrics(sim, M, lif, dynamic=bool(ov.get("fractal_dynamic", True)), seed=seed)
+                fm["fractal_wall_s"] = time.time() - t2
+                metrics.update(fm)
+                np.savez_compressed(os.path.join(out, "morphology_metrics.npz"), **per)
+            except Exception:
+                metrics["fractal_error"] = traceback.format_exc()[-500:]
         metrics.update({f"param.{k}": v for k, v in ov.items()})
 
         np.savez_compressed(os.path.join(out, "spikes.npz"), spikes=S, dt=lif.dt)

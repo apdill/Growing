@@ -45,10 +45,38 @@ def sigma_of(M, lif, g=1.0):
     return float(np.max(np.abs(np.linalg.eigvals(g * lif.spike_input * M))))
 
 
-def scan(run_dir, gs=G_DEFAULT, steps=300_000, seed=0, ext_rate=None):
+def lambda_of(M, lif, g=1.0):
+    """Largest |eigenvalue| of the effective transmission matrix at gain g."""
+    W = g * lif.spike_input * np.asarray(M, float)
+    if getattr(lif, "spike_mode", "threshold") == "branching":
+        W = np.clip(W, 0, 1)
+    return float(np.max(np.abs(np.linalg.eigvals(W))))
+
+
+def gain_for_lambda(M, lif, target, g_hi=64.0, tol=1e-4):
+    """Gain g with lambda_of(M, lif, g) = target (bisection; Λ is non-decreasing in g)."""
+    lo, hi = 0.0, 1.0
+    while lambda_of(M, lif, hi) < target and hi < g_hi:
+        lo, hi = hi, hi * 2
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        if lambda_of(M, lif, mid) < target:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo < tol:
+            break
+    return 0.5 * (lo + hi)
+
+
+def scan(run_dir, gs=G_DEFAULT, steps=300_000, seed=0, ext_rate=None, lambda_targets=None):
+    """Coupling scan. With lambda_targets, the gains are chosen so that the largest eigenvalue of
+    the transmission matrix takes the given values (compare networks at matched Λ)."""
     lif, M = load_run(run_dir)
     if ext_rate is not None:          # weaker drive -> better separated avalanches (h -> 0 limit)
         lif.ext_rate = ext_rate
+    if lambda_targets is not None:
+        gs = [gain_for_lambda(M, lif, t) for t in lambda_targets]
     rows = []
     for g in gs:
         rng = np.random.default_rng(seed)
@@ -56,7 +84,7 @@ def scan(run_dir, gs=G_DEFAULT, steps=300_000, seed=0, ext_rate=None):
         a = avalanches.analyze(S, 1, 50.0, 0.02)
         sm = avalanches.summary(a)
         dr = probes.dynamic_range(g * M, lif, seed=seed)
-        rows.append(dict(g=g, sigma=sigma_of(M, lif, g), rate=float(S.mean() / lif.dt), m=sm["branching_ratio_m"],
+        rows.append(dict(g=g, sigma=sigma_of(M, lif, g), lambda_max=lambda_of(M, lif, g), rate=float(S.mean() / lif.dt), m=sm["branching_ratio_m"],
                          tau=sm["size_exponent_tau"], alpha=sm["duration_exponent_alpha"], gamma=sm["gamma_fit"],
                          max_size=sm["max_size"], n_av=sm["n_avalanches"], dr=dr["delta_db"]))
     return rows
@@ -69,10 +97,13 @@ def main():
     ap.add_argument("--steps", type=int, default=300_000)
     ap.add_argument("--ext-rate", type=float, default=None, help="override the external event rate h")
     ap.add_argument("--g", type=float, nargs="+", default=G_DEFAULT)
+    ap.add_argument("--match-lambda", type=float, nargs="+", default=None, metavar="LAMBDA",
+                    help="instead of --g, scale each network so the largest eigenvalue of the "
+                         "transmission matrix equals these values (geometry compared at matched gain)")
     a = ap.parse_args()
     allrows = {}
     for r in a.runs:
-        rows = scan(r, gs=a.g, steps=a.steps, ext_rate=a.ext_rate)
+        rows = scan(r, gs=a.g, steps=a.steps, ext_rate=a.ext_rate, lambda_targets=a.match_lambda)
         allrows[os.path.basename(r.rstrip("/"))] = rows
         print(os.path.basename(r.rstrip("/"))[:100])
         for x in rows:
