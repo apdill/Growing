@@ -62,6 +62,14 @@ class LIFConfig:
     dt: float = 0.1
     spike_input: float = 3.0
     input_noise: float = 0.2
+    # External drive. 'uniform' (legacy): dV += input_noise * U(0,1) * dt every step, a positive
+    # mean drive that makes neurons fire regularly on their own. 'poisson': sparse external
+    # kicks of size ext_kick at rate ext_rate per neuron (Kossio et al.-style), which separates
+    # spontaneous activity (h ~ ext_rate) from recurrent propagation; for a driven branching
+    # process homeostasis then sets m ~ 1 - h / tfr.
+    external_drive: str = "uniform"
+    ext_rate: float = 0.02
+    ext_kick: float = 2.0
     leak: float = 0.02
     spike_threshold: float = 1.0
     rest: float = -1.0
@@ -480,8 +488,9 @@ class BranchMorphPlasticLIFSim:
                     did_retract = True
                     self._resprout_failures[i] = self._resprout_failures.get(i, 0) + k
 
-        # Forget interaction markers whose branches were pruned/retracted away.
-        if did_prune_forget or did_retract or not allow_growth:
+        # Forget interaction markers whose branches were pruned/retracted away. Markers are only
+        # used for rendering (not the dynamics), so this runs once at the final sync.
+        if not allow_growth:
             self.branch_net.prune_stale_interactions()
 
         # Replay after growth to apply pruning/visibility cutoffs exactly, then finalize masks.
@@ -626,8 +635,13 @@ class BranchMorphPlasticLIFSim:
 
             t0 = time.perf_counter() if profiling_enabled else None
             spike_input_contribution = self.lif_cfg.spike_input * np.dot(self.M, spikes.astype(float))
-            dV_dt = self.lif_cfg.input_noise * np.random.rand(self.N) - self.lif_cfg.leak * (V - self.lif_cfg.rest)
-            V += spike_input_contribution + dV_dt * self.lif_cfg.dt
+            if self.lif_cfg.external_drive == "poisson":
+                ext = self.lif_cfg.ext_kick * np.random.poisson(self.lif_cfg.ext_rate * self.lif_cfg.dt, self.N)
+                dV_dt = -self.lif_cfg.leak * (V - self.lif_cfg.rest)
+                V += spike_input_contribution + ext + dV_dt * self.lif_cfg.dt
+            else:
+                dV_dt = self.lif_cfg.input_noise * np.random.rand(self.N) - self.lif_cfg.leak * (V - self.lif_cfg.rest)
+                V += spike_input_contribution + dV_dt * self.lif_cfg.dt
 
             spikes = V >= self.lif_cfg.spike_threshold
             V[spikes] = self.lif_cfg.rest
@@ -942,9 +956,9 @@ def _save_profiling_outputs(results, analysis_cfg: AnalysisConfig):
     print(f"saved profiling plot: {analysis_cfg.profiling_summary_plot_path}")
 
 
-def main():
-    
-    # Centralized simulation config: update values here to control the full run.
+def default_configs():
+    """Centralized simulation config: update values here to control the full run.
+    Returns (morph_cfg, branch_cfg, lif_cfg, analysis_cfg)."""
     morph_cfg = MorphologyConfig(
         width=1024,
         height=1024,
@@ -1041,6 +1055,11 @@ def main():
         profiling_summary_json_path="profiling/profiling_summary.json",
     )
 
+    return morph_cfg, branch_cfg, lif_cfg, analysis_cfg
+
+
+def main():
+    morph_cfg, branch_cfg, lif_cfg, analysis_cfg = default_configs()
     sim_obj = BranchMorphPlasticLIFSim(morph_cfg, lif_cfg, branch_cfg)
     results = sim_obj.simulate(analysis_cfg=analysis_cfg)
 

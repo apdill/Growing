@@ -1,0 +1,4 @@
+{"name": "s1_drive_ratio",
+ "base": {"lif.duration": 5000, "lif.external_drive": "poisson", "lif.ext_kick": 2.0},
+ "grid": {"lif.ext_rate": [0.2, 0.08, 0.04, 0.02, 0.008, 0.004, 0.002]},
+ "seeds": [1, 2, 3]}

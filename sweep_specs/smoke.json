@@ -1,0 +1,1 @@
+{"name": "smoke", "base": {"lif.duration": 500}, "runs": [{"lif.external_drive": "uniform"}, {"lif.external_drive": "poisson", "lif.ext_rate": 0.02}], "seeds": [1]}

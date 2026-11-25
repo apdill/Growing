@@ -1652,8 +1652,10 @@ class Network:
             'segments_skipped': 0,
         }
         self.incremental_branch_mode = True
-        self._branch_filled_counts = [np.zeros((height, width), np.int32) for _ in range(num_neurons)]
-        self._branch_skeleton_counts = [np.zeros((height, width), np.int32) for _ in range(num_neurons)]
+        # Per-neuron coverage counts (how many recorded segments cover each pixel). uint16 halves
+        # memory vs int32 (2 x N x H x W x 2 bytes), which matters when running sweeps in parallel.
+        self._branch_filled_counts = [np.zeros((height, width), np.uint16) for _ in range(num_neurons)]
+        self._branch_skeleton_counts = [np.zeros((height, width), np.uint16) for _ in range(num_neurons)]
 
         # time controls
         sim_props = sim_props or {}
@@ -1984,10 +1986,11 @@ class Network:
                             (self._branch_skeleton_counts[idx], s_idx)):
             if pix.size:
                 flat = counts.reshape(-1)
+                cur = flat[pix]
                 if sign > 0:
-                    flat[pix] += 1
+                    flat[pix] = cur + (cur < np.iinfo(cur.dtype).max)
                 else:
-                    flat[pix] = np.maximum(flat[pix] - 1, 0)
+                    flat[pix] = cur - (cur > 0)   # unsigned: never wrap below zero
         return f_idx, s_idx
 
     def incremental_batch_update(self, neuron_id: int, removed_segs, added_segs):
