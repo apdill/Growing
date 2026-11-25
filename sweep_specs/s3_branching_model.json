@@ -1,0 +1,5 @@
+{"name": "s3_branching_model",
+ "base": {"lif.duration": 6000, "lif.external_drive": "poisson", "lif.spike_mode": "branching", "lif.spike_input": 1.0,
+          "lif.tfr": 0.05, "lif.rate_tau": 200.0},
+ "grid": {"lif.ext_rate": [0.005, 0.001, 0.0002], "lif.refractory_steps": [0, 2]},
+ "seeds": [1, 2, 3]}

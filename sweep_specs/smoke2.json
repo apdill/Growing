@@ -1,0 +1,1 @@
+{"name": "smoke2", "base": {"lif.duration": 150, "lif.external_drive": "poisson", "lif.spike_mode": "branching", "lif.spike_input": 1.0, "lif.tfr": 0.05, "lif.ext_rate": 0.001, "frozen_steps": 20000}, "seeds": [1]}
