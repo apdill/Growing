@@ -101,6 +101,29 @@ def fit_discrete_power_law(x, min_tail: int = 50, max_xmin_candidates: int = 40)
     return out
 
 
+def fit_truncated_power_law(x, lo: int = 2, hi: int = 200, min_n: int = 30) -> dict:
+    """Discrete power-law MLE restricted to a fixed window [lo, hi]:
+    P(x) = x^-a / sum_{k=lo}^{hi} k^-a.  Unlike the KS-chosen xmin (which on networks with a
+    finite-size cutoff often settles in the cutoff region and returns very steep exponents from a
+    few dozen events), a fixed window gives exponents that are comparable across runs."""
+    x = np.asarray(x, dtype=np.int64)
+    w = x[(x >= lo) & (x <= hi)]
+    out = dict(alpha=np.nan, alpha_se=np.nan, n=int(len(w)), lo=int(lo), hi=int(hi))
+    if len(w) < min_n:
+        return out
+    k = np.arange(lo, hi + 1, dtype=float); lk = np.log(k); slx = np.log(w).sum(); n = len(w)
+
+    def nll(a):
+        return a * slx + n * np.log(np.exp(-a * lk).sum())
+    res = minimize_scalar(nll, bounds=(0.01, 6.0), method="bounded")
+    a = float(res.x)
+    # Fisher information: n * Var_model[log k]
+    wts = np.exp(-a * lk); wts /= wts.sum()
+    var = (wts * lk ** 2).sum() - (wts * lk).sum() ** 2
+    out.update(alpha=a, alpha_se=float(1 / np.sqrt(n * var)) if var > 0 else np.nan)
+    return out
+
+
 # --------------------------------------------------------------------------- other diagnostics
 def size_vs_duration_exponent(sizes, durations, min_count: int = 5) -> dict:
     T = np.asarray(durations); S = np.asarray(sizes, float)
@@ -164,6 +187,8 @@ def analyze(spikes, bin_steps: int = 1, threshold_percentile: float = 50.0,
                threshold_percentile=float(threshold_percentile),
                mean_activity=float(A.mean()) if len(A) else np.nan)
     res['size_fit'] = fit_discrete_power_law(sizes)
+    res['size_fit_trunc'] = fit_truncated_power_law(sizes, 2, 200)
+    res['duration_fit_trunc'] = fit_truncated_power_law(durations, 2, 50)
     res['duration_fit'] = fit_discrete_power_law(durations)
     res['scaling'] = size_vs_duration_exponent(sizes, durations)
     tau, alpha = res['size_fit']['alpha'], res['duration_fit']['alpha']
@@ -184,6 +209,8 @@ def summary(res: dict) -> dict:
         duration_exponent_alpha=df_['alpha'], duration_exponent_se=df_.get('alpha_se', np.nan),
         duration_xmin=df_['xmin'], duration_ks=df_['ks'], duration_n_tail=df_['n_tail'],
         gamma_fit=res['scaling']['gamma'], gamma_predicted=res['gamma_predicted'],
+        size_tau_trunc=res['size_fit_trunc']['alpha'] if 'size_fit_trunc' in res else np.nan,
+        duration_alpha_trunc=res['duration_fit_trunc']['alpha'] if 'duration_fit_trunc' in res else np.nan,
         branching_ratio_m=res['branching']['m'],
         branching_offset_c=res['branching'].get('c', np.nan),
         lag1_autocorrelation=res['branching'].get('r1', np.nan),
