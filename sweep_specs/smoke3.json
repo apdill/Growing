@@ -1,0 +1,4 @@
+{"name": "smoke3", "base": {"lif.duration": 3000, "lif.external_drive": "poisson", "lif.spike_mode": "branching", "lif.spike_input": 1.0,
+ "lif.tfr": 0.05, "lif.rate_tau": 200.0, "lif.refractory_steps": 2, "lif.ext_rate": 0.0005,
+ "branch.pass_through_probability": 0.9, "morph.contact_ref_px": 200, "frozen_steps": 0},
+ "grid": {"lif.morphology_update_interval": [1, 5, 10]}, "seeds": [1]}

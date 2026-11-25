@@ -1,0 +1,6 @@
+{"name": "s6_soc_long",
+ "base": {"lif.duration": 60000, "lif.external_drive": "poisson", "lif.spike_mode": "branching", "lif.spike_input": 1.0,
+          "lif.tfr": 0.05, "lif.rate_tau": 200.0, "lif.refractory_steps": 2, "lif.morphology_update_interval": 10,
+          "branch.pass_through_probability": 0.9, "morph.contact_ref_px": 200},
+ "grid": {"lif.ext_rate": [0.002, 0.0005, 0.0001]},
+ "seeds": [1, 2, 3]}

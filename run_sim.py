@@ -202,11 +202,11 @@ class BranchMorphPlasticLIFSim:
                 f"LIFConfig.dt ({self.lif_cfg.dt}). Set growth_dt=None to auto-sync."
             )
 
-        if self.lif_cfg.morphology_update_interval != 1:
-            raise ValueError(
-                "LIFConfig.morphology_update_interval must be 1 for online branch growth. "
-                "Growth is integrated at every simulation step by design."
-            )
+        # morphology_update_interval = k > 1: activity runs every step, morphology (growth,
+        # pruning, connectivity) every k steps with a k*dt growth step -- an explicit separation
+        # of timescales (growth << activity) that makes long plastic runs ~k x cheaper.
+        if int(self.lif_cfg.morphology_update_interval) < 1:
+            raise ValueError("LIFConfig.morphology_update_interval must be >= 1")
 
         self.seed_coordinates = self._sample_seed_coordinates()
         self.initial_target_lengths = self._sample_initial_target_lengths()
@@ -391,7 +391,7 @@ class BranchMorphPlasticLIFSim:
         self.M = self._compute_connectivity_from_dendrites()
 
     def _step_morphology_online(self, current_step: int, allow_growth: bool=True, update_connectivity: bool=True,
-                                degrow_mask=None, grow_mask=None):
+                                degrow_mask=None, grow_mask=None, dt_morph=None):
         if self.branch_net is None:
             return {}
         prof = {
@@ -472,7 +472,7 @@ class BranchMorphPlasticLIFSim:
                 # the cap independently, so young/regrowing branches catch up with old ones.
                 in_growth_phase = True if grow_mask is None else bool(grow_mask[i])
                 if n.is_growing and in_growth_phase and n.has_growable_tip(requested_len):
-                    n.step(self.lif_cfg.dt, current_step=current_step)
+                    n.step(self.lif_cfg.dt if dt_morph is None else dt_morph, current_step=current_step)
                     st = getattr(n, "last_step_stats", {})
                     prof["self_avoidance_attempts"] += int(st.get("self_avoidance_attempts", 0))
                     prof["self_avoidance_rejections"] += int(st.get("self_avoidance_rejections", 0))
@@ -625,6 +625,7 @@ class BranchMorphPlasticLIFSim:
         iterations = int(self.lif_cfg.duration / self.lif_cfg.dt)
         V = np.array([n.potential for n in self.lif_neurons], dtype=float)
         refractory = None
+        morph_ref_targets = self.total_lengths.copy()
         spikes = np.array([bool(n.spiking) for n in self.lif_neurons], dtype=bool)
 
         spikes_list = []
@@ -680,20 +681,31 @@ class BranchMorphPlasticLIFSim:
                 1,   # growth
                 -1,  # degrowth (matches >= tfr rule)
             )
-            degrow_mask = self.total_lengths < (prev_target_lengths - 1e-9)
-            if self.morph_cfg.prune_quantum_px > 0:
-                # Batch sub-pixel retractions: prune once the overshoot reaches the quantum.
-                recorded = self.branch_net.get_recorded_branch_length_limits()
-                degrow_mask = (self.total_lengths < recorded - self.morph_cfg.prune_quantum_px) & \
-                              (self.total_lengths < prev_target_lengths - 1e-9)
-
-            update_connectivity = ((step + 1) % max(1, self.lif_cfg.connectivity_update_interval) == 0)
-            morph_prof = self._step_morphology_online(
-                current_step=step,
-                update_connectivity=update_connectivity,
-                degrow_mask=degrow_mask,
-                grow_mask=self.total_lengths >= prev_target_lengths - 1e-12,
-            )
+            k_morph = max(1, int(self.lif_cfg.morphology_update_interval))
+            if k_morph > 1:
+                # Compare against the targets at the previous morphology update.
+                prev_target_lengths = morph_ref_targets
+            morph_prof = {}
+            if step % k_morph == 0:
+                degrow_mask = self.total_lengths < (prev_target_lengths - 1e-9)
+                if self.morph_cfg.prune_quantum_px > 0:
+                    # Batch sub-pixel retractions: prune once the overshoot reaches the quantum.
+                    recorded = self.branch_net.get_recorded_branch_length_limits()
+                    degrow_mask = (self.total_lengths < recorded - self.morph_cfg.prune_quantum_px) & \
+                                  (self.total_lengths < prev_target_lengths - 1e-9)
+                if k_morph == 1:
+                    update_connectivity = ((step + 1) % max(1, self.lif_cfg.connectivity_update_interval) == 0)
+                else:
+                    every = max(1, int(round(self.lif_cfg.connectivity_update_interval / k_morph)))
+                    update_connectivity = ((step // k_morph) % every == 0)
+                morph_prof = self._step_morphology_online(
+                    current_step=step,
+                    update_connectivity=update_connectivity,
+                    degrow_mask=degrow_mask,
+                    grow_mask=self.total_lengths >= prev_target_lengths - 1e-12,
+                    dt_morph=self.lif_cfg.dt * k_morph,
+                )
+                morph_ref_targets = self.total_lengths.copy()
             if profiling_enabled:
                 for k, v in morph_prof.items():
                     if k.endswith("_s"):
