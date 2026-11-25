@@ -9,3 +9,4 @@ run_main.log
 # separate git repository (github.com/apdill/RNN)
 RNN/
 sweeps/
+sweeps_*.log

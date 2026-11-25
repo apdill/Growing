@@ -1,0 +1,6 @@
+{"name": "s8_timescales",
+ "base": {"lif.duration": 30000, "lif.external_drive": "poisson", "lif.spike_mode": "branching", "lif.spike_input": 1.0,
+          "lif.tfr": 0.05, "lif.refractory_steps": 2, "lif.morphology_update_interval": 10,
+          "branch.pass_through_probability": 0.9, "morph.contact_ref_px": 200, "lif.ext_rate": 0.0005},
+ "grid": {"lif.length_growth_rate": [0.1, 0.5, 2.0], "lif.rate_tau": [50.0, 200.0, 800.0]},
+ "seeds": [1, 2]}
