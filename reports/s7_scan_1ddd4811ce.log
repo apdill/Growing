@@ -1,0 +1,11 @@
+seed=1__pass_through_probability=0.9__duration=30000__ext_rate=0.0005__external_drive=poisson__morph
+  g=0.5  sigma=0.935  rate=0.00196  m=0.685  tau=4.63  alpha=5.58  gamma=1.25  max_size=63  n_av=4473  dr=20.2
+  g=0.7  sigma=1.31  rate=0.00626  m=0.88  tau=3.17  alpha=5.57  gamma=1.36  max_size=241  n_av=4125  dr=22.8
+  g=0.8  sigma=1.5  rate=0.0172  m=0.939  tau=5.6  alpha=5.75  gamma=1.41  max_size=975  n_av=3625  dr=26.2
+  g=0.9  sigma=1.68  rate=0.0565  m=0.959  tau=4.3  alpha=4.8  gamma=1.45  max_size=4011  n_av=2584  dr=27
+  g=0.95  sigma=1.77  rate=0.106  m=0.955  tau=4.19  alpha=4.26  gamma=1.31  max_size=1488  n_av=6953  dr=26.3
+  g=1  sigma=1.85  rate=0.174  m=0.936  tau=4.02  alpha=5.36  gamma=1.25  max_size=436  n_av=15832  dr=24.3
+  g=1.05  sigma=1.94  rate=0.234  m=0.89  tau=6.53  alpha=6.41  gamma=1.22  max_size=266  n_av=21369  dr=23.9
+  g=1.1  sigma=2.03  rate=0.283  m=0.834  tau=7.26  alpha=5.7  gamma=1.19  max_size=270  n_av=25115  dr=21.5
+  g=1.2  sigma=2.21  rate=0.353  m=0.701  tau=5.47  alpha=8  gamma=1.14  max_size=108  n_av=30262  dr=21.7
+  g=1.4  sigma=2.54  rate=0.443  m=0.0184  tau=7.18  alpha=7.72  gamma=1.05  max_size=99  n_av=36511  dr=19.2

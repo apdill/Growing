@@ -45,8 +45,10 @@ def sigma_of(M, lif, g=1.0):
     return float(np.max(np.abs(np.linalg.eigvals(g * lif.spike_input * M))))
 
 
-def scan(run_dir, gs=G_DEFAULT, steps=300_000, seed=0):
+def scan(run_dir, gs=G_DEFAULT, steps=300_000, seed=0, ext_rate=None):
     lif, M = load_run(run_dir)
+    if ext_rate is not None:          # weaker drive -> better separated avalanches (h -> 0 limit)
+        lif.ext_rate = ext_rate
     rows = []
     for g in gs:
         rng = np.random.default_rng(seed)
@@ -65,10 +67,12 @@ def main():
     ap.add_argument("runs", nargs="+")
     ap.add_argument("--out", default=None)
     ap.add_argument("--steps", type=int, default=300_000)
+    ap.add_argument("--ext-rate", type=float, default=None, help="override the external event rate h")
+    ap.add_argument("--g", type=float, nargs="+", default=G_DEFAULT)
     a = ap.parse_args()
     allrows = {}
     for r in a.runs:
-        rows = scan(r, steps=a.steps)
+        rows = scan(r, gs=a.g, steps=a.steps, ext_rate=a.ext_rate)
         allrows[os.path.basename(r.rstrip("/"))] = rows
         print(os.path.basename(r.rstrip("/"))[:100])
         for x in rows:
@@ -80,7 +84,7 @@ def main():
             for ax, key, lab in zip(axes, ["dr", "tau", "alpha", "rate"],
                                     ["dynamic range Δ (dB)", "size exponent τ", "duration exponent α", "rate"]):
                 ax.plot(sig, [x[key] for x in rows], "o-", ms=3, color=f"C{i % 10}", alpha=0.8)
-                s1 = [x for x in rows if x["g"] == 1.0][0]
+                s1 = min(rows, key=lambda x: abs(x["g"] - 1.0))
                 ax.plot(s1["sigma"], s1[key], "k*", ms=12)
                 ax.set_xlabel("σ (offspring per spike)"); ax.set_title(lab)
                 ax.axvline(1.0, color="0.6", lw=0.8)

@@ -31,6 +31,30 @@ Each sweep is reproducible with `python sweep.py sweep_specs/<name>.json`.
    subcritical side of the optimum (the "reverberating regime", m ≈ 0.9–0.98, also reported in vivo by
    Wilting & Priesemann 2018).
 
+6. **Finite size (s7): is it real criticality or quasi-criticality?** The power law during growth is
+   robust for N ≥ 50 (τ = 1.43–1.45, α = 1.6–1.75) and its cutoff grows with N (s_c ~ N^0.5), but
+   the coupling σ(t) is *not* pinned: homeostasis makes it oscillate around the set point, and
+   avalanches that start in high-σ periods are 10–50× larger than those in low-σ periods. Part of
+   the pooled power law is therefore a mixture across sub- and supercritical states
+   ("self-organised quasi-criticality", Bonachela & Muñoz 2009). The fluctuations shrink faster
+   than N^−1/2 (s.d. σ ~ N^−0.66), and so does the mixing (high/low ⟨S⟩ ratio 50 → 11 from
+   N = 25 to 200): **the larger the network, the more tightly growth holds it at one point.**
+   That point stays at a fixed distance from m = 1 (1 − m ≈ 0.035 at every N), set by the drive.
+
+7. **Function at the set point (s7 coupling scans):** in frozen copies of the grown networks
+   (N = 100, 200), the peak of the dynamic range, the peak of the branching ratio and the point where
+   the frozen rate equals the target all fall at the same coupling, and **the mean coupling the network
+   grows to sits exactly there**. Homeostatic growth places the network at its point of maximal
+   sensitivity; at N = 25–50 the curves are too noisy to say this.
+8. **Timescales (s8): the clean 3/2 law is tied to *fast* plasticity.** With slow growth (σ pinned,
+   s.d. 0.1) the network sits at m ≈ 0.956 and P(S) has a shallow body (slope ≈ 0.95) with a hard
+   cutoff, not τ = 3/2. Faster growth (σ s.d. 0.3–0.45) gives slopes of 1.25–1.35 (KS fits τ ≈ 1.4)
+   and satisfies crackling-noise scaling. The 3/2-like statistics come with strong σ sweeping
+   (high/low-σ ⟨S⟩ ratio 30–80 vs ~6 when slow). Two readings, both plausible: (i) quasi-criticality
+   (mixing sub/supercritical epochs), and (ii) the slow-growth network is at a stationary point that
+   is near-critical but *driven* (avalanches overlap, Das & Levina 2019 "relaxed timescale
+   separation"), which flattens the body. s9 (h ∝ 1/N) is set up to separate these.
+
 <!-- S7 / S8 sections appended below -->
 
 ## What was changed in the code (all opt-in; legacy defaults are bit-identical)
@@ -84,3 +108,38 @@ with σ up to the transition and the grown networks (★) sit just below it.
 | 0.002 | 0.98 | 1.32–1.33 | 1.41–1.43 | 1.26–1.33 / 1.28 | ~220 | ~4 500 |
 
 Rates at target (0.043–0.049 vs 0.05) in all runs.
+
+### s7 — finite size, N = 25/50/100/200 at constant density, h/r* = 0.01 → `reports/s7_finite_size_fss.png`, `reports/s7_coupling_scans.png`
+
+| N | avalanches | τ (KS) | α | m | ⟨S²⟩/⟨S⟩ | s.d. σ(t) | ⟨S⟩ high-σ / low-σ tertile |
+|---|---|---|---|---|---|---|---|
+| 25 | 490 | 2.46 (xmin 292) | 2.67 | 0.968 | 650 | 0.52 | 50 |
+| 50 | 935 | 1.45 | 1.67 | 0.963 | 990 | 0.33 | 37 |
+| 100 | 1 490 | 1.43 | 1.75 | 0.964 | 1 500 | 0.21 | 16 |
+| 200 | 2 710 | 1.43 | 1.60 | 0.965 | 1 980 | 0.13 | 11 |
+
+* Cutoff grows as N^0.54 (⟨S²⟩/⟨S⟩) / N^0.51 (99.9th percentile). Caveat: h is fixed, so N·h (external
+  events per step) grows with N and avalanches overlap more in large networks; part of the cutoff
+  growth may be merging. s9 holds N·h fixed.
+* s.d. of σ(t) ~ N^−0.66: growth-driven fluctuations of the coupling vanish with size.
+* 1 − m ≈ 0.035 at every N: the distance from m = 1 is set by drive and refractoriness, not N.
+* Frozen networks show steep KS exponents (τ 3–6) at every g. A single snapshot of σ is a random draw
+  from the oscillation (final σ is up to 1.3 s.d. from the mean), and KS fits pick xmin in the
+  cutoff; frozen exponents are not a reliable criticality test here. The scans are: rate rises smoothly
+  with σ (no bistability), m peaks at ≈ 0.96 where the rate reaches target, then falls (saturation +
+  refractoriness), and Δ peaks at the same place for N = 100/200 (28 dB) — where the network grew to.
+
+### s8 — growth timescales: `length_growth_rate` 0.1/0.5/2 × `rate_tau` 50/200/800 (N = 50) → `reports/s8_timescales_timescales.png`, `reports/s8_timescales.png`
+
+| growth rate | s.d. σ | m | slope P(S), S∈[2,200] | ⟨S⟩ high/low σ | rate / target | Δ (dB) |
+|---|---|---|---|---|---|---|
+| 0.1 | 0.09–0.13 | 0.955–0.962 | 0.92–0.97 | 5–7 | 0.91–0.95 | 29–33 |
+| 0.5 | 0.27–0.39 | 0.956–0.974 | 1.14–1.31 | 26–64 | 0.95–0.97 | 25–31 |
+| 2.0 | 0.38–0.45 | 0.961–0.976 | 1.25–1.34 | 31–82 | 0.50–0.89 | 20–32 |
+
+* Slow growth: tight homeostasis, highest and most consistent dynamic range, but no 3/2 law.
+* Fast growth: σ overshoots, power laws look "critical" (τ_KS ≈ 1.4, α ≈ 1.6, γ_fit ≈ γ_pred ≈ 1.4–1.5),
+  but these are mixtures; at growth rate 2 with short rate_tau, homeostasis itself fails (rate 50 %
+  of target, relaxation oscillations).
+* rate_tau (activity-sensor timescale) matters less than the growth rate; a long sensor with fast
+  growth gives the largest σ swings (the classic delayed-feedback oscillation).

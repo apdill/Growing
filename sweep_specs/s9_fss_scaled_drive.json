@@ -1,0 +1,12 @@
+{"name": "s9_fss_scaled_drive",
+ "_doc": "finite-size scaling towards the SOC limit: N*h fixed (h = 0.0005*50/N), so the external event rate per step and hence avalanche overlap stay constant while h/r* -> 0 as N grows",
+ "base": {"lif.duration": 30000, "lif.external_drive": "poisson", "lif.spike_mode": "branching", "lif.spike_input": 1.0,
+          "lif.tfr": 0.05, "lif.rate_tau": 200.0, "lif.refractory_steps": 2, "lif.morphology_update_interval": 10,
+          "branch.pass_through_probability": 0.9, "morph.contact_ref_px": 200},
+ "runs": [
+   {"morph.num_neurons": 200, "morph.width": 2048, "morph.height": 2048, "lif.ext_rate": 0.000125},
+   {"morph.num_neurons": 100, "morph.width": 1448, "morph.height": 1448, "lif.ext_rate": 0.00025},
+   {"morph.num_neurons": 50,  "morph.width": 1024, "morph.height": 1024, "lif.ext_rate": 0.0005},
+   {"morph.num_neurons": 25,  "morph.width": 724,  "morph.height": 724,  "lif.ext_rate": 0.001}
+ ],
+ "seeds": [1, 2]}

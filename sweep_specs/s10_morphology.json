@@ -1,0 +1,7 @@
+{"name": "s10_morphology",
+ "_doc": "growth scaling constants: fractal dimension D (sets the per-order length ratio r = 2^(-1/D)) x base inter-branch length l0; N = 50 at h/r* = 0.01",
+ "base": {"lif.duration": 30000, "lif.external_drive": "poisson", "lif.spike_mode": "branching", "lif.spike_input": 1.0,
+          "lif.tfr": 0.05, "lif.rate_tau": 200.0, "lif.refractory_steps": 2, "lif.morphology_update_interval": 10,
+          "branch.pass_through_probability": 0.9, "morph.contact_ref_px": 200, "lif.ext_rate": 0.0005},
+ "grid": {"branch.D": [1.3, 1.8, 2.5], "branch.branch_length_scale": [25.0, 60.0, 150.0]},
+ "seeds": [1, 2]}
