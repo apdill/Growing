@@ -178,3 +178,25 @@ Rates on target everywhere; arbor radius 300–375 px; coverage 26–29 %.
 `finite_size.py` (FSS + σ-conditioned avalanche test), `timescales.py`, `reanalyze.py` (window
 exponents for all runs → `reports/trunc_exponents.csv`), `cross_sweep.py`, `scan_frozen.py --ext-rate
 --g` (low-drive coupling scans), `reports/make_*.py` (figure scripts).
+
+### External check — Stiber-lab simulated culture (Zenodo 17220617, run tR_1.0--fE_0.98) → `reports/stiber_tR_1.0--fE_0.98.png`
+Disc-growth model (van Ooyen calcium rule) + LIF with 98 % excitatory cells, short-term synaptic
+depression/facilitation, endogenously active pacemakers; 10 000 neurons, 28 DIV equivalent. The
+deposit only contains burst epochs (runs of 10 ms bins with > 50 network spikes = thresholded
+avalanches, θ = 50), so only those were analysed (`external_analysis/stiber_bursts.py --frames`).
+* **No scale-free statistics at all:** all 9 160 bursts are system-spanning and stereotyped —
+  S = 42 000–56 000 spikes (CV 1–5 %), 99.5 % of the 10 000 neurons take part, ~5 spikes/neuron,
+  T = 110–370 ms; P(S) occupies one or two log bins (power-law fits meaningless), S does not grow
+  with T (γ ≈ 0). Quasi-periodic inter-burst interval ≈ 4.8 s throughout.
+* Within a burst, activity grows by ×1.16–1.26 per 10 ms (median rising-phase ratio; ×2 at onset)
+  → supercritical propagation, terminated by synaptic resource depletion.
+* Development: first burst at ~4.5 DIV; bursts get larger and shorter (T 23 → 14.5 bins) and sharper,
+  with a regime change at ~13–15 DIV (size distribution becomes bimodal).
+* **Homeostasis is satisfied by bursting:** burst spikes alone give 0.93 Hz per neuron in the second
+  half vs the outgrowth set point of 1.0 Hz. With little spontaneous drive, rate homeostasis is met by
+  periodic system-wide bursts — the low-input "bursting" regime of Zierenberg et al. 2018 — not by
+  criticality. Our model avoids this because probabilistic transmission without depression has a
+  continuous transition, so the set point lands at m ≈ 1 − h/r* instead.
+* Implication: if we add inhibition + synaptic depression for culture realism (needed to match
+  Wagenaar-type data), growth may tip into this bursting regime; the drive ratio h/r* and depression
+  strength then decide critical vs bursting — a concrete, testable axis for the project.
