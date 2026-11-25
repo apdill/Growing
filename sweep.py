@@ -77,7 +77,12 @@ def run_id(ov):
         v = ov[k]
         short = k.split(".")[-1]
         parts.append(f"{short}={v:g}" if isinstance(v, (int, float)) and not isinstance(v, bool) else f"{short}={v}")
-    return "__".join(parts).replace("/", "-")[:200]
+    rid = "__".join(parts).replace("/", "-")
+    if len(rid) > 180:
+        # keep it readable but unique: varying keys stay visible via the hash of the full id
+        import hashlib
+        rid = rid[:150] + "__" + hashlib.md5(rid.encode()).hexdigest()[:10]
+    return f"seed={ov.get('seed', 1)}__" + rid
 
 
 def run_one(args):
