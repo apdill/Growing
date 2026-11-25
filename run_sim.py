@@ -218,6 +218,7 @@ class BranchMorphPlasticLIFSim:
         self.tfr = lif_cfg.tfr  # compatibility with sim.Graphics helpers
         self.rates = np.zeros(self.N, dtype=float)  # exponential firing-rate trace
         self._last_resprout_step = {}
+        self.coupling_trace = []   # (step, sigma) at every connectivity update
         self._resprout_failures = {}
         if self.lif_cfg.plasticity_max_total_length is None:
             print("warning: plasticity_max_total_length=None -> target lengths are uncapped")
@@ -517,6 +518,7 @@ class BranchMorphPlasticLIFSim:
         if update_connectivity:
             t_c = time.perf_counter()
             self.M = self._compute_connectivity_from_dendrites()
+            self.coupling_trace.append((current_step, self.coupling_sigma()))
             prof["connectivity_s"] += time.perf_counter() - t_c
         prof["active_tips_after"] = int(sum(len(n.active_tips) for n in self.branch_net.neurons))
         rstats = getattr(self.branch_net, "last_rebuild_history_stats", {})
@@ -565,6 +567,14 @@ class BranchMorphPlasticLIFSim:
             M = contact / max(1e-9, self.morph_cfg.contact_ref_px)
         M *= self.morph_cfg.connectivity_gain
         return M
+
+    def coupling_sigma(self) -> float:
+        """Mean expected offspring per spike: column sums of the effective coupling
+        (transmission probabilities in 'branching' mode, spike_input * M otherwise)."""
+        W = self.lif_cfg.spike_input * self.M
+        if getattr(self.lif_cfg, "spike_mode", "threshold") == "branching":
+            W = np.clip(W, 0.0, 1.0)
+        return float(W.sum(axis=0).mean())
 
     def _update_dendrite_lengths(self):
         if self.t <= 0:
@@ -745,6 +755,7 @@ class BranchMorphPlasticLIFSim:
             "growth_state_list": growth_state_list,
             "branch_network": self.branch_net,
             "connectivity_matrix": self.M.copy(),
+            "coupling_trace": np.array(self.coupling_trace, dtype=float),
             "profiling": results_profile,
         }
 

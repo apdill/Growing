@@ -1,0 +1,5 @@
+{"name": "s4_contact_granularity",
+ "base": {"lif.duration": 6000, "lif.external_drive": "poisson", "lif.spike_mode": "branching", "lif.spike_input": 1.0,
+          "lif.tfr": 0.05, "lif.rate_tau": 200.0, "lif.refractory_steps": 2},
+ "grid": {"morph.contact_ref_px": [50, 200, 800], "lif.ext_rate": [0.001, 0.0002]},
+ "seeds": [1, 2]}

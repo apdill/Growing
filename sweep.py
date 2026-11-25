@@ -153,6 +153,10 @@ def run_one(args):
         total_px = int(np.count_nonzero(sim.branch_net.filled_mask))
 
         late_rates = R[b0:].mean(0)
+        ct = np.asarray(res.get("coupling_trace", np.zeros((0, 2))))
+        late_ct = ct[ct[:, 0] >= b0, 1] if len(ct) else np.array([np.nan])
+        sigma_stats = dict(sigma_late_mean=float(np.mean(late_ct)), sigma_late_std=float(np.std(late_ct)),
+                           sigma_final=float(late_ct[-1]) if len(late_ct) else np.nan)
         metrics = dict(
             run_id=rid, seed=seed, wall_s=wall, steps=steps, N=sim.N,
             mean_rate=float(late_rates.mean()), rate_cv_across_neurons=float(late_rates.std() / max(late_rates.mean(), 1e-12)),
@@ -164,7 +168,7 @@ def run_one(args):
             **avs, **avs4, **frz,
             m_windows=wb["m"].tolist(), m_first_window=float(wb["m"][0]) if len(wb["m"]) else np.nan,
             dynamic_range_db=dr["delta_db"], dr_F0=dr["F0"], dr_Fmax=dr["Fmax"],
-            **cs, **gs,
+            **cs, **gs, **sigma_stats,
         )
         metrics.update({f"param.{k}": v for k, v in ov.items()})
 
@@ -172,7 +176,8 @@ def run_one(args):
         np.save(os.path.join(out, "M.npy"), M)
         np.savez_compressed(os.path.join(out, "traces.npz"), rates=R[::10].astype(np.float32),
                             lengths=L[::10].astype(np.float32), dr_stim=dr["stim_rates"], dr_F=dr["F"],
-                            m_windows=wb["m"], window_edges=wb["window_edges"])
+                            m_windows=wb["m"], window_edges=wb["window_edges"],
+                            coupling_trace=res.get("coupling_trace", np.zeros((0, 2))))
         try:
             fig = avalanches.plot(av, dt=lif.dt, title=rid[:120])
             fig.savefig(os.path.join(out, "avalanches.png"), dpi=80); plt.close(fig)
