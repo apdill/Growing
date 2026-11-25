@@ -1,0 +1,8 @@
+{"name": "f1_morph_calibration",
+ "_doc": "morphology-only calibration: knobs -> measured box-counting D (needs fractal.py metrics); short runs, no plasticity analysis",
+ "base": {"lif.duration": 3000, "lif.external_drive": "poisson", "lif.spike_mode": "branching", "lif.tfr": 0.05,
+          "lif.ext_rate": 0.0005, "lif.morphology_update_interval": 10, "morph.num_neurons": 9,
+          "morph.width": 1024, "morph.height": 1024, "branch.pass_through_probability": 0.9, "frozen_steps": 0},
+ "grid": {"branch.curviness_magnitude": [0.3, 0.8, 1.2, 2.0], "branch.branch_angle": [0.3927, 0.6981, 1.0472],
+          "branch.D": [1.3, 1.6, 1.9], "branch.randomness": [0.2, 0.45, 0.8]},
+ "seeds": [1]}

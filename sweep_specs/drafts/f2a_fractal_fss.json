@@ -1,0 +1,10 @@
+{"name": "f2a_fractal_fss",
+ "_doc": "measured-D sweep in the s9 large-N regime (N*h fixed). Replace FROM_F1 morphology settings after F1.",
+ "base": {"lif.duration": 30000, "lif.external_drive": "poisson", "lif.spike_mode": "branching", "lif.spike_input": 1.0,
+          "lif.tfr": 0.05, "lif.rate_tau": 200.0, "lif.refractory_steps": 2, "lif.morphology_update_interval": 10,
+          "branch.pass_through_probability": 0.9, "morph.contact_ref_px": 200},
+ "runs": [
+   {"morph.num_neurons": 200, "morph.width": 2048, "morph.height": 2048, "lif.ext_rate": 0.000125, "_morph": "FROM_F1 setting 1..4 (expand to 4 runs)"},
+   {"morph.num_neurons": 100, "morph.width": 1448, "morph.height": 1448, "lif.ext_rate": 0.00025,  "_morph": "FROM_F1 setting 1..4 (expand to 4 runs)"}
+ ],
+ "seeds": [1, 2]}
