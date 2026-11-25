@@ -45,8 +45,11 @@ class MorphologyConfig:
     resprout_blocked: bool = True
     resprout_cooldown_steps: int = 40        # base wait between sprouts; doubles per failed sprout
     max_resprouts_per_neuron: int | None = 4  # max re-sprouted primaries alive at once per neuron
-    # A re-sprout that gets blocked before reaching this length is retracted (no soma stubs).
-    resprout_min_length_px: float = 30.0
+    # Any primary dendrite (original or re-sprout) blocked before reaching this length without
+    # having branched is retracted -- a collapsed growth cone -- so somas don't carry stubs.
+    retract_blocked_stubs: bool = True
+    stub_min_length_px: float = 30.0
+    stub_check_interval_steps: int = 20   # how often blocked stubs are looked for
     # Prune only once the realised arbor exceeds the target by this much. Retractions below
     # one pixel are invisible on the raster masks, and pruning every step for ~0.06 px of
     # retraction dominated run time. 0 = prune every step (legacy).
@@ -114,6 +117,12 @@ class BranchNeuronConfig:
     fusion_probability: float = 0.05
     fusion_distance_threshold: float = 12.0
     use_splines: bool = True
+    # Stochastic branching: each tip branches as a Poisson process along its path with mean
+    # inter-branch length branch_length_scale * r**order, r = mean_branches**(-1/D) (the same
+    # fractal length ratio as the deterministic schedule). False = legacy depth schedule.
+    stochastic_branching: bool = True
+    branch_length_scale: float = 60.0
+    branch_min_segment_px: float = 8.0
     trajectory_planning: bool = True
     trajectory_length: float = 40.0
     trajectory_deviation: float = 10.0
@@ -277,6 +286,9 @@ class BranchMorphPlasticLIFSim:
             "fusion_probability": cfg.fusion_probability,
             "fusion_distance_threshold": cfg.fusion_distance_threshold,
             "use_splines": cfg.use_splines,
+            "stochastic_branching": cfg.stochastic_branching,
+            "branch_length_scale": cfg.branch_length_scale,
+            "branch_min_segment_px": cfg.branch_min_segment_px,
             "trajectory_planning": cfg.trajectory_planning,
             "trajectory_length": cfg.trajectory_length,
             "trajectory_deviation": cfg.trajectory_deviation,
@@ -363,7 +375,7 @@ class BranchMorphPlasticLIFSim:
         self.M = self._compute_connectivity_from_dendrites()
 
     def _step_morphology_online(self, current_step: int, allow_growth: bool=True, update_connectivity: bool=True,
-                                degrow_mask=None):
+                                degrow_mask=None, grow_mask=None):
         if self.branch_net is None:
             return {}
         prof = {
@@ -406,6 +418,8 @@ class BranchMorphPlasticLIFSim:
         # Update each branch neuron's target schedule and visible cutoff.
         for i, n in enumerate(self.branch_net.neurons):
             n.set_visible_total_length(float(self.total_lengths[i]))
+            # Per-tip growth limit: target length acts as a maximum path distance from the soma.
+            n.path_length_cap = float(self.total_lengths[i])
 
         # Rebuild masks first so collision checks see the current pruned morphology.
         if not incremental_masks and not did_prune_forget:
@@ -438,7 +452,10 @@ class BranchMorphPlasticLIFSim:
                         if n.sprout_new_primary():
                             self._last_resprout_step[i] = current_step
                             prof["resprouts"] = prof.get("resprouts", 0) + 1
-                if n.is_growing and wants_growth:
+                # Grow while the target is not shrinking (rate <= tfr). Each tip extends up to
+                # the cap independently, so young/regrowing branches catch up with old ones.
+                in_growth_phase = True if grow_mask is None else bool(grow_mask[i])
+                if n.is_growing and in_growth_phase and n.has_growable_tip(requested_len):
                     n.step(self.lif_cfg.dt, current_step=current_step)
                     st = getattr(n, "last_step_stats", {})
                     prof["self_avoidance_attempts"] += int(st.get("self_avoidance_attempts", 0))
@@ -452,9 +469,13 @@ class BranchMorphPlasticLIFSim:
 
         # Retract re-sprouts that were blocked while still stubs.
         did_retract = False
-        if self.morph_cfg.resprout_blocked:
+        check_stubs = (not allow_growth) or (current_step % max(1, self.morph_cfg.stub_check_interval_steps) == 0)
+        if check_stubs and (self.morph_cfg.resprout_blocked or self.morph_cfg.retract_blocked_stubs):
             for i, n in enumerate(self.branch_net.neurons):
-                k = n.retract_blocked_resprouts(self.morph_cfg.resprout_min_length_px)
+                if self.morph_cfg.retract_blocked_stubs:
+                    k = n.retract_blocked_primaries(self.morph_cfg.stub_min_length_px)
+                else:
+                    k = n.retract_blocked_resprouts(self.morph_cfg.stub_min_length_px)
                 if k:
                     did_retract = True
                     self._resprout_failures[i] = self._resprout_failures.get(i, 0) + k
@@ -650,6 +671,7 @@ class BranchMorphPlasticLIFSim:
                 current_step=step,
                 update_connectivity=update_connectivity,
                 degrow_mask=degrow_mask,
+                grow_mask=self.total_lengths >= prev_target_lengths - 1e-12,
             )
             if profiling_enabled:
                 for k, v in morph_prof.items():

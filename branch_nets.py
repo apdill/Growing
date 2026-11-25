@@ -248,6 +248,15 @@ class Neuron:
         self.fusion_prob = params.get('fusion_probability',0.0)
         self.fusion_distance_threshold = params.get('fusion_distance_threshold',10.0)
         self.is_growing= True
+        # Stochastic (per-unit-length) branching with fractal order scaling. Off by default so
+        # standalone network generation keeps the deterministic depth schedule.
+        self.stochastic_branching = bool(params.get('stochastic_branching', False))
+        self.branch_length_scale = float(params.get('branch_length_scale', 60.0))   # mean 1st inter-branch length
+        self.branch_min_segment_px = float(params.get('branch_min_segment_px', 8.0))
+        _nb = max(float(params.get('mean_branches', 2.0)), 1.0 + 1e-9)
+        _D = float(params.get('D', 2.0)) if params.get('D', 2.0) > 0 else 1.0
+        self.fractal_ratio = _nb ** (-1.0 / _D)   # same ratio as the depth schedule
+        self.path_length_cap = None   # per-tip growth limit (path distance from soma), set by the sim
         self.branch_data : List[Dict]= []
         self.visible_total_length = float(self.dendrite.total_length)
         self.max_recorded_path_length = 0.0
@@ -307,6 +316,44 @@ class Neuron:
         }
         self._init_primary_tips()
 
+    # ------------------------------------------------- branching / path helpers
+    def _sample_seg_len(self, depth: int):
+        """Inter-branch length for a tip of branch order `depth`.
+
+        Stochastic mode: branching is a Poisson process along each tip's path with rate
+        1/l_k, l_k = branch_length_scale * r**k and r = mean_branches**(-1/D) (the fractal
+        length ratio of the deterministic schedule). Tips of the last order never branch.
+        Returns None in schedule mode (use dendrite.branch_lengths)."""
+        if not self.stochastic_branching:
+            return None
+        if depth >= self.dendrite.depth - 1:
+            return float('inf')
+        mean = self.branch_length_scale * self.fractal_ratio ** depth
+        lo = min(self.branch_min_segment_px, 0.5 * mean)
+        if self.dendrite.det:
+            return float(mean)
+        return float(lo + np.random.exponential(max(mean - lo, 1e-6)))
+
+    def _tip_seg_len(self, tip_dict: Dict, depth: int) -> float:
+        if not self.stochastic_branching:
+            return float(self.dendrite.branch_lengths[depth])
+        if tip_dict.get('seg_len') is None or not np.isfinite(tip_dict.get('seg_len', np.nan)) and depth < self.dendrite.depth - 1:
+            tip_dict['seg_len'] = self._sample_seg_len(depth)
+        return float(tip_dict['seg_len'])
+
+    def _tip_path_start(self, tip_dict: Dict, depth: int) -> float:
+        """Path distance from the soma to the start of this tip's current branch."""
+        if self.stochastic_branching:
+            return float(tip_dict.get('parent_branch_path_dist', 0.0))
+        return float(sum(self.dendrite.branch_lengths[:depth])) if depth > 0 else 0.0
+
+    def tip_path_dist(self, tip_dict: Dict) -> float:
+        return self._tip_path_start(tip_dict, tip_dict['depth']) + float(tip_dict.get('traced_len', 0.0))
+
+    def has_growable_tip(self, cap: float, eps: float = 1e-3) -> bool:
+        return any(t['depth'] < self.dendrite.depth and self.tip_path_dist(t) < cap - eps
+                   for t in self.active_tips)
+
     # -------------------------------------------------------- tip initialisation
     def _init_primary_tips(self):
         if self.dendrite.depth == 0:
@@ -339,6 +386,7 @@ class Neuron:
                 self._primary_tip_templates = {}
             self._primary_tip_templates[self._tip_id] = (pt.copy(), float(a))
             self.active_tips.append(dict(id=self._tip_id, pt=pt, angle=a, depth=0, traced_len=0.0, 
+                                        seg_len=self._sample_seg_len(0),
                                         parent_tip_id=None,
                                         parent_branch_path_dist=0.0,
                                         encountered_dendrites=set(),
@@ -707,7 +755,7 @@ class Neuron:
                 self.active_tips.remove(tip_dict); continue
             
             # Target length for the current segment at this depth
-            seg_len_for_this_depth = self.dendrite.branch_lengths[depth]
+            seg_len_for_this_depth = self._tip_seg_len(tip_dict, depth)
             remain_in_segment  = seg_len_for_this_depth - tip_dict['traced_len']
             
             # Growth step for this iteration, capped by remaining length in segment
@@ -715,13 +763,22 @@ class Neuron:
             # Limit max growth step to prevent jumping over dendrites
             max_step_size = 2.0  # Maximum pixels per step to ensure collision detection
             current_growth_step = min(base_growth_step, remain_in_segment, max_step_size)
+
+            # Per-tip growth limit: each tip extends until its own path distance from the soma
+            # reaches the cap (the homeostatic target acts like a radius). Capped tips stay
+            # active so they resume when the target grows.
+            if self.path_length_cap is not None:
+                room = float(self.path_length_cap) - (self._tip_path_start(tip_dict, depth) + tip_dict['traced_len'])
+                if room < 1e-3:
+                    continue
+                current_growth_step = min(current_growth_step, room)
             
             if current_growth_step < 1e-3:
                 if remain_in_segment < 1e-3:
                     # Draw accumulated splined segment before spawning children
                     if len(tip_dict['accumulated_points']) > 1:
                         avg_thickness = tip_dict.get('avg_accumulated_thickness', 1.0)
-                        dist_to_start_of_depth_level = sum(self.dendrite.branch_lengths[:depth]) if depth > 0 else 0
+                        dist_to_start_of_depth_level = self._tip_path_start(tip_dict, depth)
                         chunk_start_abs = dist_to_start_of_depth_level + tip_dict.get('accumulated_start_traced_len', 0.0)
                         chunk_end_abs = chunk_start_abs + tip_dict.get('accumulated_distances', 0.0)
                         splined_segments_to_draw.append((
@@ -736,6 +793,7 @@ class Neuron:
                                 depth=depth,
                                 tip_traced_start=float(tip_dict.get('accumulated_start_traced_len', 0.0)),
                                 tip_traced_end=float(tip_dict.get('accumulated_start_traced_len', 0.0) + tip_dict.get('accumulated_distances', 0.0)),
+                                tip_seg_len=tip_dict.get('seg_len'),
                                 angle=float(tip_dict.get('angle', 0.0)),
                             )
                         ))
@@ -747,7 +805,7 @@ class Neuron:
                 self.active_tips.remove(tip_dict); continue
 
             # Calculate distance and thickness values needed for collision detection
-            dist_to_start_of_depth_level = sum(self.dendrite.branch_lengths[:depth]) if depth > 0 else 0
+            dist_to_start_of_depth_level = self._tip_path_start(tip_dict, depth)
             safe_D_draw = self.dendrite.D if self.dendrite.D > 0 else 1.0
             current_dist_from_soma = dist_to_start_of_depth_level + tip_dict['traced_len']
             current_prop = current_dist_from_soma / self.dendrite.total_length
@@ -997,6 +1055,7 @@ class Neuron:
                             depth=depth,
                             tip_traced_start=float(tip_dict.get('accumulated_start_traced_len', 0.0)),
                             tip_traced_end=float(tip_dict.get('accumulated_start_traced_len', 0.0) + tip_dict.get('accumulated_distances', 0.0)),
+                                tip_seg_len=tip_dict.get('seg_len'),
                             angle=float(ang),
                         )
                     ))
@@ -1030,6 +1089,7 @@ class Neuron:
                             depth=depth,
                             tip_traced_start=float(tip_dict.get('accumulated_start_traced_len', 0.0)),
                             tip_traced_end=float(tip_dict.get('accumulated_start_traced_len', 0.0) + tip_dict.get('accumulated_distances', 0.0)),
+                                tip_seg_len=tip_dict.get('seg_len'),
                             angle=float(ang),
                         )
                     ))
@@ -1063,7 +1123,12 @@ class Neuron:
         base_angle_for_children = parent_final_angle if parent_final_angle is not None else parent_tip_dict['angle']
 
         k = self.dendrite.mean_branches
-        if not self.dendrite.det and self.dendrite.mean_branches > 0:
+        if self.stochastic_branching:
+            # A branching event is a bifurcation (occasionally a trifurcation when
+            # mean_branches > 2); the order-dependent rate carries the fractal scaling.
+            extra = max(0.0, float(self.dendrite.mean_branches) - 2.0)
+            k = 2 + (int(np.random.poisson(extra)) if (extra > 0 and not self.dendrite.det) else 0)
+        elif not self.dendrite.det and self.dendrite.mean_branches > 0:
             k = max(1,int(np.round(np.random.normal(self.dendrite.mean_branches,1))))
         
         for i in range(k):
@@ -1072,8 +1137,9 @@ class Neuron:
                  new_angle += np.random.normal(0, self.dendrite.randomness * 0.2)
 
             new_tips_list.append(dict(id=self._tip_id, pt=p1.copy(), angle=new_angle, depth=depth+1, traced_len=0.0,
+                                      seg_len=self._sample_seg_len(depth + 1),
                                       parent_tip_id=parent_tip_dict.get('id'),
-                                      parent_branch_path_dist=float(sum(self.dendrite.branch_lengths[:depth]) + parent_tip_dict.get('traced_len', 0.0)),
+                                      parent_branch_path_dist=float(self._tip_path_start(parent_tip_dict, depth) + parent_tip_dict.get('traced_len', 0.0)),
                                       encountered_dendrites=set(), pass_through_dendrites=set(),
                                       accumulated_points=[], accumulated_distances=0.0,
                                       accumulated_start_traced_len=0.0,
@@ -1224,6 +1290,7 @@ class Neuron:
             angle=angle,
             depth=int(seg.get('depth', 0)),
             traced_len=float(seg.get('tip_traced_end', 0.0)),
+            seg_len=seg.get('tip_seg_len'),
             parent_tip_id=seg.get('parent_tip_id'),
             parent_branch_path_dist=float(seg.get('parent_branch_path_dist', 0.0)),
             encountered_dendrites=set(),
@@ -1409,6 +1476,7 @@ class Neuron:
 
     def _new_root_tip(self, tid: int, pt: np.ndarray, angle: float) -> Dict:
         return dict(id=tid, pt=np.array(pt, dtype=float).copy(), angle=float(angle), depth=0, traced_len=0.0,
+                    seg_len=self._sample_seg_len(0),
                     parent_tip_id=None, parent_branch_path_dist=0.0,
                     encountered_dendrites=set(), pass_through_dendrites=set(),
                     accumulated_points=[], accumulated_distances=0.0,
@@ -1462,23 +1530,50 @@ class Neuron:
         return True
 
     def retract_blocked_resprouts(self, min_length: float) -> int:
+        """Retract blocked re-sprouts shorter than `min_length` (see retract_blocked_primaries)."""
+        return self.retract_blocked_primaries(min_length, resprouts_only=True)
+
+    def retract_blocked_primaries(self, min_length: float, resprouts_only: bool = False) -> int:
         """
-        Remove re-sprouted primaries that stopped growing (all tips blocked) while still
-        shorter than `min_length` px, so failed sprouts don't remain as stubs on the soma.
-        Returns the number of sprouts retracted.
+        Remove primary dendrites that stopped growing (tip blocked by a collision / edge),
+        never branched, and are still shorter than `min_length` px -- a collapsed growth
+        cone -- so they don't remain as stubs on the soma. Retracted primaries are not
+        restored later; a neuron left below target can re-sprout in a free direction.
+        Returns the number of primaries retracted.
         """
-        resprouts = getattr(self, '_resprout_ids', None)
-        if not resprouts:
+        resprouts = getattr(self, '_resprout_ids', set())
+        if resprouts_only:
+            candidates = set(resprouts)
+        else:
+            candidates = {seg.get('tip_id') for seg in self.branch_data if seg.get('parent_tip_id') is None}
+            candidates |= set(getattr(self, '_primary_tip_templates', {}).keys()) & set(resprouts)
+        if not candidates:
             return 0
-        active_ids = {t['id'] for t in self.active_tips}
-        active_parents = {t.get('parent_tip_id') for t in self.active_tips}
+        # Lineage: tip -> parent (from recorded segments and live tips).
+        parent_of = {}
+        for seg in self.branch_data:
+            parent_of.setdefault(seg.get('tip_id'), seg.get('parent_tip_id'))
+        for t in self.active_tips:
+            parent_of.setdefault(t['id'], t.get('parent_tip_id'))
+
+        def root_of(tid):
+            seen = set()
+            while parent_of.get(tid) is not None and tid not in seen:
+                seen.add(tid); tid = parent_of[tid]
+            return tid
+
+        subtree_segs, subtree_active = {}, set()
+        for seg in self.branch_data:
+            subtree_segs.setdefault(root_of(seg.get('tip_id')), []).append(seg)
+        for t in self.active_tips:
+            subtree_active.add(root_of(t['id']))
+
         retracted = 0
-        for tid in list(resprouts):
-            if tid in active_ids or tid in active_parents:
-                continue                      # still growing
-            segs = [seg for seg in self.branch_data if seg.get('tip_id') == tid]
-            if any(seg.get('parent_tip_id') == tid for seg in self.branch_data):
-                continue                      # it branched -> a real dendrite, keep it
+        for tid in list(candidates):
+            if tid in subtree_active:
+                continue                      # some tip of this primary is still growing
+            segs = subtree_segs.get(tid, [])
+            # extent of the whole primary subtree (path distance from the soma)
             length = max([float(seg.get('path_end_dist', 0.0)) for seg in segs] + [0.0])
             if length >= min_length:
                 continue
@@ -1488,7 +1583,7 @@ class Neuron:
                 drop = {id(seg) for seg in segs}
                 self.branch_data = [seg for seg in self.branch_data if id(seg) not in drop]
             resprouts.discard(tid)
-            self._primary_tip_templates.pop(tid, None)
+            getattr(self, '_primary_tip_templates', {}).pop(tid, None)
             retracted += 1
         if retracted:
             self.max_recorded_path_length = max(
