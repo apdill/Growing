@@ -1,0 +1,23 @@
+{
+  "n_avalanches": 1442,
+  "threshold": 9,
+  "threshold_percentile": 50.0,
+  "bin_steps": 1,
+  "burn_in_steps": 3000,
+  "mean_activity_per_bin": 9.354285714285714,
+  "size_exponent_tau": 4.360074741609395,
+  "size_exponent_se": 0.2108298402320913,
+  "size_xmin": 9,
+  "size_ks": 0.03172262682268823,
+  "size_n_tail": 254,
+  "duration_exponent_alpha": 4.684785400477086,
+  "duration_exponent_se": 0.23884916170799003,
+  "duration_xmin": 4,
+  "duration_ks": 0.028148010600442364,
+  "duration_n_tail": 238,
+  "gamma_fit": 1.084287927686899,
+  "gamma_predicted": 1.0966379273790088,
+  "branching_ratio_m": 3.942974119276101e-06,
+  "max_size": 32,
+  "max_duration": 14
+}
